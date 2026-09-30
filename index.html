@@ -1,0 +1,847 @@
+<meta charset="utf-8">
+<title>Shopping Insight</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Wei's Taobao spending report, 2017–2026: 732 orders and NT$428,904 in one scroll.">
+<meta property="og:title" content="Shopping Insight · Everything I Bought">
+<meta property="og:description" content="Wei's Taobao spending report, 2017–2026.">
+<meta property="og:image" content="icon-512.png">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter+Tight:wght@400;500&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+TC:wght@300;400;500&display=swap">
+<style>
+  /* Layout: one long scroll; a fixed WebGL stage holds a plaster shopping cart on the right, chapters of copy scroll past on the left, a technical HUD frames it all */
+  :root {
+    --bg: #09090A; --ink: #EDEAE4; --soft: #B9B5AE; --muted: #77736D; --line: rgba(237,234,228,0.12);
+    --blue: #4F7CFF; --blue-dim: rgba(79,124,255,0.18);
+    --f-disp: 'Fraunces', 'Noto Serif TC', Georgia, serif;
+    --f-body: 'Inter Tight', 'Noto Sans TC', system-ui, sans-serif;
+    --f-mono: 'JetBrains Mono', 'Noto Sans TC', ui-monospace, monospace;
+    --f-zh: 'Noto Sans TC', 'PingFang TC', sans-serif;
+    --gutter: max(16px, 6vw);
+    --panel: rgba(9,9,10,0.12);
+    color-scheme: dark;
+  }
+  /* light chapters: the whole page flips to warm paper, the canvas is transparent so it follows */
+  html.light { --bg: #ECEAE5; --ink: #141416; --soft: #45433F; --muted: #85817A; --line: rgba(20,20,22,0.14); --blue: #2F5BEA; --panel: rgba(236,234,229,0.14); color-scheme: light; }
+  html, body { transition: background-color 700ms cubic-bezier(.23,1,.32,1), color 700ms ease; }
+  main *, .hud *, .ptag { transition: color 600ms ease, border-color 600ms ease, background-color 600ms ease; }
+  html.light .grain { mix-blend-mode: multiply; opacity: 0.05; }
+  .vignette { transition: opacity 700ms ease; }
+  html.light .vignette { opacity: 0.18; }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  html.lenis, html.lenis body { height: auto; }
+  .lenis.lenis-smooth { scroll-behavior: auto !important; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-body); -webkit-font-smoothing: antialiased; }
+  #gl { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100lvh; display: block; z-index: 0; }
+  .grain { position: fixed; inset: -60%; z-index: 1; pointer-events: none; opacity: 0.07; mix-blend-mode: screen; animation: grain 0.9s steps(6) infinite; }
+  @keyframes grain { 0% { transform: translate(0, 0); } 20% { transform: translate(-3%, 2%); } 40% { transform: translate(2%, -4%); } 60% { transform: translate(-4%, -1%); } 80% { transform: translate(3%, 3%); } 100% { transform: translate(0, 0); } }
+  .vignette { position: fixed; inset: 0; z-index: 1; pointer-events: none; background: radial-gradient(120% 90% at 65% 45%, transparent 45%, rgba(0,0,0,0.65)); }
+
+  /* HUD */
+  .hud { position: fixed; inset: 0; z-index: 3; pointer-events: none; font-family: var(--f-mono); font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+  .hud::before, .hud::after { content: ''; position: absolute; left: 0; right: 0; pointer-events: none; }
+  .hud::before { top: 0; height: 96px; background: linear-gradient(var(--bg) 55%, transparent); }
+  .hud::after { bottom: 0; height: 84px; background: linear-gradient(transparent, var(--bg) 55%); }
+  .hud .top { position: absolute; left: var(--gutter); right: var(--gutter); top: 0; height: 64px; z-index: 1; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
+  .hud .mark { font-family: var(--f-disp); font-size: 15px; letter-spacing: 0.14em; color: var(--ink); text-transform: none; }
+  .hud .mark i { font-style: italic; }
+  .hud .vline { position: absolute; top: 0; bottom: 0; right: calc(var(--gutter) + 5vw); width: 1px; background: var(--line); }
+  .hud .cross { position: absolute; top: 60px; right: calc(var(--gutter) + 5vw - 4px); width: 9px; height: 9px; }
+  .hud .cross::before, .hud .cross::after { content: ''; position: absolute; background: var(--blue); }
+  .hud .cross::before { left: 4px; top: 0; width: 1px; height: 9px; }
+  .hud .cross::after { top: 4px; left: 0; height: 1px; width: 9px; }
+  .rail { position: absolute; right: calc(var(--gutter) + 5vw - 13px); top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: flex-end; gap: 14px; }
+  .rail span { display: flex; flex-direction: row-reverse; align-items: center; gap: 10px; height: 10px; }
+  .rail span::before { content: ''; width: 10px; height: 1px; background: var(--muted); transition: width 300ms cubic-bezier(.23,1,.32,1), background-color 300ms ease; }
+  .rail span b { font-weight: 400; opacity: 0; transform: translateX(4px); transition: opacity 200ms ease, transform 300ms cubic-bezier(.23,1,.32,1); }
+  .rail span.on::before { width: 26px; background: var(--blue); }
+  .rail span.on b { opacity: 0; }
+  .hud .bottom { position: absolute; left: var(--gutter); right: var(--gutter); bottom: 0; height: 52px; z-index: 1; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--line); gap: 16px; }
+  .hud .coords { color: var(--blue); font-variant-numeric: tabular-nums; }
+  .hud .bottom .mid { color: var(--soft); }
+
+  #overlay { position: fixed; inset: 0; z-index: 2; pointer-events: none; width: 100vw; height: 100vh; }
+  .tags { position: fixed; inset: 0; z-index: 2; pointer-events: none; }
+  .ptag { position: absolute; font-family: var(--f-mono); font-size: 10.5px; letter-spacing: 0.1em; color: var(--soft); white-space: nowrap; opacity: 0; transform: translateY(-50%); display: flex; flex-direction: column; gap: 3px; }
+  .ptag b { font-family: var(--f-zh); font-weight: 400; font-size: 13px; letter-spacing: 0.04em; color: var(--ink); }
+  .ptag em { font-style: normal; color: var(--blue); }
+  .ptag.l { text-align: right; align-items: flex-end; }
+  .dim { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: 0.2em; fill: var(--blue); }
+
+  /* chapters */
+  main { position: relative; z-index: 2; }
+  .ch { position: relative; padding-inline: var(--gutter); padding-block: 26vh 14vh; min-height: 190vh; display: flex; flex-direction: column; gap: 22vh; }
+  .ch[data-name="Exploded"] .col { width: min(30rem, 33vw); }
+  .ch .col { width: min(34rem, 40vw); margin-left: max(0px, calc(5vw - 16px)); display: flex; flex-direction: column; gap: 22px; }
+  .hero { min-height: 100vh; min-height: 100svh; padding-block: 0; justify-content: center; }
+  .hero .col { gap: 26px; width: min(44rem, 52vw); }
+  .eyebrow { font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--blue); }
+  .eyebrow span { color: var(--muted); }
+  .eyebrow .sep { font-style: normal; }
+  .zh .who { font-family: var(--f-disp); font-style: italic; font-size: 1.15em; letter-spacing: 0.02em; color: var(--ink); margin-right: 0.3em; }
+  h1, h2 { margin: 0; font-family: var(--f-disp); font-weight: 300; letter-spacing: -0.02em; font-variation-settings: 'opsz' 144; text-wrap: balance; }
+  h1 { font-size: clamp(3.1rem, 7.6vw, 8rem); line-height: 0.95; }
+  h2 { font-size: clamp(2.3rem, 4.6vw, 4.4rem); line-height: 1.02; }
+  h1 i, h2 i { font-style: italic; }
+  .zh { margin: 0; font-family: var(--f-zh); font-weight: 300; font-size: clamp(0.95rem, 1.15vw, 1.08rem); letter-spacing: 0.24em; color: var(--soft); }
+  .lede { margin: 0; font-family: var(--f-zh); font-weight: 300; font-size: 15.5px; line-height: 1.9; color: var(--soft); max-width: 30rem; }
+  .lede strong { font-weight: 500; color: var(--ink); }
+  .lede em { font-style: normal; color: var(--blue); }
+  .meta { display: flex; flex-wrap: wrap; gap: 10px 26px; font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.18em; color: var(--muted); text-transform: uppercase; }
+  .meta b { color: var(--ink); font-weight: 400; }
+  .cue { display: flex; align-items: center; gap: 12px; font-family: var(--f-mono); font-size: 10.5px; letter-spacing: 0.24em; color: var(--muted); }
+  .cue i { width: 44px; height: 1px; background: var(--line); position: relative; overflow: hidden; }
+  .cue i::after { content: ''; position: absolute; inset: 0; width: 40%; background: var(--blue); animation: cue 1.8s cubic-bezier(.77,0,.175,1) infinite; }
+  @keyframes cue { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
+
+  .panel { border: 1px solid var(--line); background: var(--panel); backdrop-filter: blur(4px) saturate(1.2); -webkit-backdrop-filter: blur(4px) saturate(1.2); padding: 22px 22px 20px; display: flex; flex-direction: column; gap: 16px; }
+  .panel .ph { display: flex; justify-content: space-between; font-family: var(--f-mono); font-size: 10.5px; letter-spacing: 0.2em; color: var(--muted); text-transform: uppercase; }
+  .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; }
+  .stats > div { padding: 16px 0 18px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .stats > div:nth-child(odd) { padding-right: 18px; }
+  .stats > div:nth-child(even) { padding-left: 18px; border-left: 1px solid var(--line); }
+  .k { font-family: var(--f-zh); font-size: 12.5px; letter-spacing: 0.14em; color: var(--muted); }
+  .v { font-family: var(--f-disp); font-weight: 300; font-size: clamp(1.8rem, 2.6vw, 2.5rem); line-height: 1; font-variant-numeric: tabular-nums lining-nums; white-space: nowrap; }
+  .v small { font-family: var(--f-mono); font-size: 0.36em; letter-spacing: 0.1em; color: var(--muted); margin-right: 6px; vertical-align: 0.5em; }
+  .v.blue { color: var(--blue); }
+
+  .rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+  .rows li { display: grid; grid-template-columns: 2.2rem minmax(0, 1fr) 5.2rem; align-items: center; gap: 4px 12px; padding: 11px 0; border-top: 1px solid var(--line); }
+  .rows .n { font-family: var(--f-mono); font-size: 10.5px; color: var(--muted); letter-spacing: 0.1em; }
+  .rows .t { font-family: var(--f-zh); font-size: 14px; font-weight: 400; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rows .a { font-family: var(--f-mono); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; color: var(--soft); }
+  .rows .b { grid-column: 2 / 4; height: 2px; background: var(--line); position: relative; overflow: hidden; }
+  .rows .b i { position: absolute; inset: 0 auto 0 0; width: var(--w); background: var(--soft); transform-origin: left center; }
+  .rows li.pk .b i, .rows li.pk .a { background: var(--blue); color: var(--blue); }
+  .rows li.pk .a { background: none; }
+  .rows .part { font-family: var(--f-mono); font-size: 9.5px; letter-spacing: 0.16em; color: var(--blue); text-transform: uppercase; margin-left: 8px; }
+
+  html.snap, html.snap *, html.snap *::before, html.snap *::after { transition: none !important; }
+  .ch:not(.hero) .zh { font-family: var(--f-mono); font-weight: 400; font-size: 11px; letter-spacing: 0.24em; color: var(--blue); }
+  /* price bands: items rise above the axis, money hangs below it */
+  .bf { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); padding-top: 6px; }
+  .bf .c { display: flex; flex-direction: column; min-width: 0; padding: 0 5px; }
+  .bf .up, .bf .dn { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+  .bf .up { height: 128px; justify-content: flex-end; }
+  .bf .dn { height: 104px; justify-content: flex-start; }
+  .bf i { display: block; height: var(--h); }
+  .bf .up i { background: linear-gradient(to top, var(--blue), rgba(79,124,255,0.3)); transform-origin: bottom; }
+  .bf .dn i { background: var(--muted); opacity: 0.55; transform-origin: top; }
+  .bf .c.hot .dn i { background: var(--ink); opacity: 1; }
+  .bf b { font-family: var(--f-mono); font-weight: 400; font-size: 11px; color: var(--soft); text-align: center; font-variant-numeric: tabular-nums; }
+  .bf .c.hot .dn b { color: var(--ink); }
+  .bf .lab { margin: 6px -5px; padding: 8px 0; border-top: 1px solid var(--soft); border-bottom: 1px solid var(--line); font-family: var(--f-mono); font-size: 9.5px; letter-spacing: 0.04em; color: var(--muted); text-align: center; white-space: nowrap; }
+  .bf .c.hot .lab { color: var(--ink); }
+  .legend i.s { background: var(--muted); }
+  .bf-sum { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--line); }
+  .bf-sum > div { padding: 14px 0 2px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .bf-sum > div + div { padding-left: 16px; border-left: 1px solid var(--line); }
+  .bf-sum .v2 { font-family: var(--f-disp); font-weight: 300; font-size: clamp(1.3rem, 1.7vw, 1.6rem); line-height: 1; white-space: nowrap; }
+  .bf-sum .v2 small { font-family: var(--f-zh); font-size: 11px; color: var(--muted); margin: 0 8px 0 3px; }
+  .bf-sum .v2 em { font-style: normal; color: var(--blue); }
+  .hist { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); align-items: end; gap: 10px; height: 180px; padding-top: 8px; }
+  .hist div { display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; height: 100%; min-width: 0; }
+  .hist i { display: block; height: var(--h); background: linear-gradient(to top, var(--blue), rgba(79,124,255,0.35)); transform-origin: bottom; }
+  .hist div.hot i { background: var(--ink); }
+  .hist span { font-family: var(--f-mono); font-size: 9.5px; letter-spacing: 0.02em; color: var(--muted); text-align: center; white-space: nowrap; }
+  .hist b { font-family: var(--f-mono); font-weight: 400; font-size: 11px; color: var(--soft); text-align: center; }
+  .legend { display: flex; gap: 18px; font-family: var(--f-mono); font-size: 10px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; }
+  .legend i { display: inline-block; width: 8px; height: 8px; margin-right: 6px; vertical-align: 0; background: var(--blue); }
+  .legend i.w { background: var(--ink); }
+
+  .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .card { border: 1px solid var(--line); background: var(--panel); backdrop-filter: blur(4px) saturate(1.2); -webkit-backdrop-filter: blur(4px) saturate(1.2); padding: 18px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .card:has(.rank) { position: relative; overflow: hidden; }
+  .rank { position: absolute; top: 13px; right: -34px; width: 118px; padding: 4px 0; transform: rotate(45deg); text-align: center; font-family: var(--f-mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; background: var(--soft); color: var(--bg); }
+  .rank.r1 { background: var(--blue); color: #fff; }
+  .rank.r2 { background: #fff; color: #2F5BEA; }
+  .card .ph { font-family: var(--f-mono); font-size: 10px; letter-spacing: 0.2em; color: var(--blue); text-transform: uppercase; }
+  .card .t { font-family: var(--f-zh); font-size: 14px; color: var(--ink); line-height: 1.5; }
+  .card .s { font-family: var(--f-mono); font-size: 10.5px; color: var(--muted); letter-spacing: 0.08em; }
+  .card .v { font-size: clamp(1.5rem, 2vw, 2rem); }
+  .card.wide { grid-column: 1 / -1; }
+
+  .fest .a { width: auto; }
+  .rows.fest li { grid-template-columns: 3.4rem minmax(0, 1fr) 4.2rem; }
+  .rows .t small { font-family: var(--f-mono); font-size: 10px; letter-spacing: 0.08em; color: var(--muted); margin-left: 8px; }
+  .rows li.base .b i { background: var(--muted); }
+  .eras { display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, 3.6rem); gap: 0 10px; font-family: var(--f-mono); font-size: 11px; }
+  .eras > span { padding: 10px 0; border-top: 1px solid var(--line); text-align: right; color: var(--soft); font-variant-numeric: tabular-nums; display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+  .eras > span.h { color: var(--muted); font-size: 9.5px; letter-spacing: 0.14em; border-top: 0; }
+  .eras > span.c { justify-content: flex-start; font-family: var(--f-zh); font-size: 13.5px; color: var(--ink); }
+  .eras > span.c em { font-style: normal; font-family: var(--f-mono); font-size: 10px; margin-left: 8px; }
+  .eras .up { color: var(--blue); } .eras .dn { color: var(--muted); }
+  .eras i { display: inline-block; width: 4px; height: calc(var(--h) * 0.9px + 1px); max-height: 26px; background: var(--muted); vertical-align: bottom; }
+  .eras .hi i { background: var(--blue); }
+  .eras .hi { color: var(--ink); }
+  .era-names { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .take { list-style: none; margin: 0; padding: 0; counter-reset: t; display: flex; flex-direction: column; }
+  .take li { counter-increment: t; display: grid; grid-template-columns: 2.2rem minmax(0, 1fr); gap: 6px 12px; padding: 16px 0; border-top: 1px solid var(--line); }
+  .take li::before { content: counter(t, decimal-leading-zero); font-family: var(--f-mono); font-size: 10.5px; color: var(--blue); padding-top: 3px; }
+  .take b { font-family: var(--f-zh); font-weight: 500; font-size: 15px; color: var(--ink); }
+  .take p { grid-column: 2; margin: 0; font-family: var(--f-zh); font-weight: 300; font-size: 14px; line-height: 1.8; color: var(--soft); }
+  .take p em { font-style: normal; color: var(--blue); font-family: var(--f-mono); font-size: 12.5px; }
+  .tagline { font-family: var(--f-mono); font-size: 10px; letter-spacing: 0.2em; color: var(--muted); text-transform: uppercase; }
+  .end { min-height: 150vh; padding-bottom: 30vh; }
+  .credits { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: 0.12em; line-height: 2; color: var(--muted); }
+  .credits b { color: var(--soft); font-weight: 400; }
+
+  .flare { position: fixed; left: 0; top: 0; width: 140vmax; height: 140vmax; margin: -70vmax 0 0 -70vmax; z-index: 1; pointer-events: none; opacity: 0; mix-blend-mode: screen; background: radial-gradient(closest-side, rgba(220,232,255,0.9), rgba(79,124,255,0.35) 22%, rgba(79,124,255,0.08) 50%, transparent 72%); will-change: transform, opacity; }
+  .loading { position: fixed; right: calc(var(--gutter) + 5vw + 18px); top: 50%; z-index: 3; font-family: var(--f-mono); font-size: 10.5px; letter-spacing: 0.2em; color: var(--muted); transition: opacity 400ms ease; }
+  .loading.done { opacity: 0; }
+
+  @media (max-width: 760px) {
+    #gl { opacity: 0.4; }
+    .ch .col, .hero .col, .ch[data-name="Exploded"] .col { width: 100%; margin-left: 0; }
+    .rail, .hud .vline, .hud .cross { display: none; }
+    .hud .bottom .mid { display: none; }
+    .ch { gap: 16vh; }
+    .hero .eyebrow span { display: block; margin-top: 8px; }
+    .hero .eyebrow .sep { display: none; }
+    .eyebrow, .ch:not(.hero) .zh { font-size: 15.4px; }
+    .eras { grid-template-columns: minmax(0, 1fr) repeat(3, 2.8rem); gap: 0 6px; font-size: 10.5px; }
+    .eras > span.c { flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; font-size: 13px; }
+    .eras > span.c em { margin-left: 0; }
+    .loading { right: var(--gutter); top: auto; bottom: 70px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .grain, .cue i::after { animation: none; }
+  }
+</style>
+
+<canvas id="gl" aria-hidden="true"></canvas>
+<div class="grain" id="grain" aria-hidden="true"></div>
+<div class="vignette" aria-hidden="true"></div>
+<svg id="overlay" aria-hidden="true">
+  <g id="dimline" opacity="0" style="display:none">
+    <line id="dl" stroke="#4F7CFF" stroke-width="1"></line>
+    <line id="dl1" stroke="#4F7CFF" stroke-width="1"></line>
+    <line id="dl2" stroke="#4F7CFF" stroke-width="1"></line>
+    <text id="dt" class="dim" text-anchor="middle">← 980 MM →</text>
+  </g>
+  <g id="leaders" fill="none" stroke="#4F7CFF" stroke-width="1"></g>
+</svg>
+<div class="tags" id="tags" aria-hidden="true"></div>
+<div class="flare" id="flare" aria-hidden="true"></div>
+<div class="loading" id="loading">Loading model 000%</div>
+
+<div class="hud" aria-hidden="true">
+  <div class="vline"></div><div class="cross"></div>
+  <div class="top"><span class="mark">Everything <i>I</i> Bought</span><span id="hud-ch">00 / 06</span></div>
+  <div class="rail" id="rail"></div>
+  <div class="bottom"><span class="coords" id="hud-xyz">ROT 000.0° · EXP 0.00 · WIRE 0.00</span><span class="mid" id="hud-name">TAOBAO ORDER HISTORY</span><span id="hud-pct">SCROLL 000%</span></div>
+</div>
+
+<main id="main">
+  <section class="ch hero" data-name="Index" aria-label="Everything I Bought">
+    <div class="col">
+      <div class="eyebrow" data-r>Taobao · Order History <span><i class="sep">· </i>2017.01 — 2026.09</span></div>
+      <h1 data-r>Everything<br><i>I</i> Bought.</h1>
+      <p class="zh" data-r><span class="who">Wei’s</span> 淘寶消費分析報告</p>
+      <div class="meta" data-r><span><b>732</b> Orders</span><span><b>895</b> Items</span><span><b>NT$428,904</b> Total</span></div>
+      <div class="cue" data-r><i></i>Scroll to find out</div>
+    </div>
+  </section>
+
+  <section class="ch" data-theme="light" data-name="Overview" aria-label="總覽">
+    <div class="col">
+      <div class="eyebrow" data-r>01 · Overview</div>
+      <h2 data-r>One cart,<br><i>nine and a half</i> years.</h2>
+      <p class="zh" data-r>一台購物車，九年半</p>
+      <p class="lede" data-r>從 2017 年 1 月第一筆神牛閃光燈,到 2026 年 9 月的馬桶刷。全部倒進同一台購物車,總共是這些數字。</p>
+    </div>
+    <div class="col">
+      <div class="panel" data-r>
+        <div class="ph"><span>Totals</span><span>NT$ · rate 4.65</span></div>
+        <div class="stats">
+          <div data-r><span class="k">總消費</span><span class="v blue"><small>NT$</small><span data-count="428904">428,904</span></span></div>
+          <div data-r><span class="k">訂單</span><span class="v"><span data-count="732">732</span></span></div>
+          <div data-r><span class="k">品項</span><span class="v"><span data-count="895">895</span></span></div>
+          <div data-r><span class="k">平均每品項</span><span class="v"><small>NT$</small><span data-count="479">479</span></span></div>
+        </div>
+      </div>
+      <p class="lede" data-r>金額以 <em>1 CNY = 4.65 TWD</em> 換算,已排除 66 個「交易關閉」的品項。</p>
+    </div>
+  </section>
+
+  <section class="ch" data-name="Exploded" aria-label="類別">
+    <div class="col">
+      <div class="eyebrow" data-r>02 · Exploded View</div>
+      <h2 data-r>Taken apart,<br><i>by category.</i></h2>
+      <p class="zh" data-r>拆開來看，每一層都是一個類別</p>
+      <p class="lede" data-r>把購物車拆成七個零件:前六大類各佔一個,其餘 11 類加起來是車架。<strong>光是前六類就佔了 66%</strong>。</p>
+    </div>
+    <div class="col">
+      <ol class="rows" id="catRows"></ol>
+    </div>
+  </section>
+
+  <section class="ch" data-theme="light" data-name="Wireframe" aria-label="單價區間">
+    <div class="col">
+      <div class="eyebrow" data-r>03 · Wireframe</div>
+      <h2 data-r>Mostly <i>small</i> things.</h2>
+      <p class="zh" data-r>大多是小東西</p>
+      <p class="lede" data-r><strong>64% 的品項單價不到 NT$300</strong>,但真正把錢花掉的,是單價 NT$1,000–2,999 的那 72 件。</p>
+    </div>
+    <div class="col">
+      <div class="panel" data-r>
+        <div class="ph"><span>Unit price bands</span><span>NT$</span></div>
+        <div class="legend"><span><i></i>品項數 ↑</span><span><i class="s"></i>金額 ↓</span><span><i class="w"></i>花最多的一檔</span></div>
+        <div class="bf" id="hist"></div>
+        <div class="bf-sum">
+          <div><span class="k">單價 NT$300 以下</span><span class="v2">64%<small>品項</small><em>21%</em><small>金額</small></span></div>
+          <div><span class="k">單價 NT$1,000 以上</span><span class="v2">10%<small>品項</small><em>49%</em><small>金額</small></span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ch" data-name="Sections" aria-label="年度">
+    <div class="col">
+      <div class="eyebrow" data-r>04 · Sections</div>
+      <h2 data-r>Year by year,<br><i>layer by layer.</i></h2>
+      <p class="zh" data-r>一年一層</p>
+      <p class="lede" data-r>把購物車橫切成十層,每一層是一年。<strong>2018 年花最多</strong>(NT$72,572),<strong>2019 年買最多件</strong>(151 件)。</p>
+    </div>
+    <div class="col">
+      <ol class="rows" id="yearRows"></ol>
+    </div>
+  </section>
+
+  <section class="ch" data-name="Outliers" aria-label="特別的時刻">
+    <div class="col">
+      <div class="eyebrow" data-r>05 · Outliers</div>
+      <h2 data-r>The <i>outliers.</i></h2>
+      <p class="zh" data-r>那些特別的時刻</p>
+    </div>
+    <div class="col">
+      <div class="cards">
+        <div class="card wide" data-r><span class="rank r1">1st</span><span class="ph">Most expensive item</span><span class="v blue"><small>NT$</small>15,805</span><span class="t">九號電動滑板車 ES2</span><span class="s">2018.05.01 · 神行數碼專營店</span></div>
+        <div class="card" data-r><span class="rank r2">2nd</span><span class="ph">Runner-up</span><span class="v"><small>NT$</small>11,490</span><span class="t">雅馬哈電薩克斯風 YDS150</span><span class="s">2025.01.08</span></div>
+        <div class="card" data-r><span class="rank">3rd</span><span class="ph">Third</span><span class="v"><small>NT$</small>9,381</span><span class="t">bering 情侶對錶</span><span class="s">2018.06.20</span></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="cards">
+        <div class="card wide" data-r><span class="rank r1">1st</span><span class="ph">Peak month</span><span class="v blue"><small>NT$</small>20,310</span><span class="t">2026 年 5 月</span><span class="s">單月最高 · 兩台 ARZOPA 電子相框就佔了 NT$9,052</span></div>
+        <div class="card" data-r><span class="rank r2">2nd</span><span class="ph">No. 2 month</span><span class="v"><small>NT$</small>16,437</span><span class="t">2018 年 5 月</span><span class="s">滑板車那個月</span></div>
+        <div class="card" data-r><span class="rank">3rd</span><span class="ph">No. 3 month</span><span class="v"><small>NT$</small>16,043</span><span class="t">2020 年 11 月</span><span class="s">飛利浦指紋鎖那個月</span></div>
+        <div class="card wide" data-r><span class="ph">Cheapest thing that counts</span><span class="t">「補差價專用」連結,買了 9,000 份,每份 ¥0.01</span><span class="s">2024.09.30 · 總共 ¥90,約 NT$419,每份只有 NT$0.05</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ch" data-theme="light" data-name="Sale days" aria-label="大促">
+    <div class="col">
+      <div class="eyebrow" data-r>06 · Sale Days</div>
+      <h2 data-r>The calendar<br><i>made me do it.</i></h2>
+      <p class="zh" data-r>大促日期的影響</p>
+      <p class="lede" data-r>把每年的大促檔期加起來,只佔 <strong>18.6% 的日子</strong>,卻花掉了 <strong>38.6% 的錢</strong>(NT$165,831)。平常一天平均花 NT$122,下面是各檔期每天的倍數。</p>
+    </div>
+    <div class="col">
+      <div class="panel" data-r>
+        <div class="ph"><span>Daily spend vs. normal</span><span>2017—2026</span></div>
+        <ol class="rows fest" id="festRows"></ol>
+      </div>
+    </div>
+    <div class="col">
+      <div class="cards">
+        <div class="card wide" data-r><span class="ph">11.11 當天</span><span class="v blue">10.7<small style="margin:0 0 0 4px">×</small></span><span class="t">單日倍數最高。九年來這一天共買了 27 件、NT$11,776。</span><span class="s">2024、2025 年當天沒買,都在 10 月中預熱期先下單</span></div>
+        <div class="card" data-r><span class="ph">6 月</span><span class="v"><small>NT$</small>72,200</span><span class="t">一年裡花最多的月份,618 是真正的主檔期</span><span class="s">6/18 當天反而 0 筆</span></div>
+        <div class="card" data-r><span class="ph">9.18 當天</span><span class="v">0<small style="margin:0 0 0 6px">筆</small></span><span class="t">918 幾乎沒影響,真正有感的是 9.9(5.0×)</span><span class="s">520 也只有 1.4×</span></div>
+      </div>
+      <p class="lede" data-r>商品名稱裡還掛著「狂歡價」標籤的,就有 <strong>97 件、NT$67,267</strong>。</p>
+    </div>
+  </section>
+
+  <section class="ch" data-name="Shift" aria-label="類別的變化">
+    <div class="col">
+      <div class="eyebrow" data-r>07 · Shift</div>
+      <h2 data-r>What I buy<br><i>has changed.</i></h2>
+      <p class="zh" data-r>買的東西正在改變</p>
+      <p class="lede" data-r>把九年切成三段,每段各類別佔當期花費的比例。<strong>同一個人,三段像三個不同的購物車。</strong></p>
+    </div>
+    <div class="col">
+      <div class="era-names" data-r>
+        <div class="card"><span class="ph">2017—19</span><span class="t">拍照與打扮</span><span class="s">NT$157,910</span></div>
+        <div class="card"><span class="ph">2020—22</span><span class="t">待在家裡</span><span class="s">NT$105,078</span></div>
+        <div class="card"><span class="ph">2023—26</span><span class="t">騎車出門</span><span class="s">NT$166,200</span></div>
+      </div>
+      <div class="panel" data-r>
+        <div class="ph"><span>Share of spend by era</span><span>%</span></div>
+        <div class="eras" id="eras"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ch end" data-name="Checkout" aria-label="結尾">
+    <div class="col">
+      <div class="eyebrow" data-r>08 · Checkout</div>
+      <h2 data-r>So, what<br><i>happened?</i></h2>
+      <p class="zh" data-r>小結,以及幾個猜測</p>
+    </div>
+    <div class="col">
+      <ol class="take">
+        <li data-r><b>手機取代了相機</b><p>攝影器材從 <em>15.6%</em> 掉到 <em>1.9%</em>。可能是手機鏡頭已經夠用,也可能是器材早就買齊了。</p></li>
+        <li data-r><b>疫情那幾年,錢花在家裡</b><p>2020—22 居家收納從 9.3% 跳到 <em>22.1%</em>,3C、寵物、汽機車也都變多,和待在家的時間變長對得上。</p></li>
+        <li data-r><b>一個新嗜好,改寫整份清單</b><p>腳踏車從 <em>0.5%</em> 變成最大類 <em>26.5%</em>(67 件)。2023 年開始騎車,零件就一件一件進來。</p></li>
+        <li data-r><b>從「看起來」到「去做什麼」</b><p>眼鏡、飾品、包、衣服在前期佔 25%,後期剩 8%;取而代之的是騎車、樂器、編織這些需要動手的事。</p></li>
+        <li data-r><b>大促還是有用,只是越買越早</b><p>618 仍是每年最大的檔期;雙 11 從 10 月中預熱就開始下單,合計 <em>NT$58,694</em>,是第二大檔期。2024 年起 11/11 當天反而沒買。</p></li>
+        <li data-r><b>集運費幾乎消失</b><p>運費與集運從 <em>5.4%</em> 降到 <em>0.3%</em>,推測是改用淘寶直郵、包郵到台灣的服務。</p></li>
+      </ol>
+    </div>
+    <div class="col">
+      <h2 data-r>Every order,<br><i>accounted for.</i></h2>
+      <p class="credits" data-r>
+        <b>資料</b> 淘寶「已買到的寶貝」匯出,2017.01.31 — 2026.09.13<br>
+        <b>換算</b> 1 CNY = 4.65 TWD,不含交易關閉<br>
+        <b>大促</b> 520: 5/18–21 · 618: 6/1–20 · 99/918: 9/9–20 · 雙11: 10/15–11/13(含預熱) · 雙12: 12/10–13<br>
+        <b>模型</b> Blender 自製鋼線購物車,10 個零件<br>
+        <b>類別</b> 961 件商品逐一人工判讀,共 17 類
+      </p>
+    </div>
+  </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lenis@1.1.13/dist/lenis.min.js"></script>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const pad = (n, l = 2) => String(n).padStart(l, '0');
+const money = n => n.toLocaleString('en-US');
+
+// ---------- data ----------
+const EN = ['Outdoor & Sports', 'Music & Audio', 'Cycling', 'Home & Storage', 'Tech & Computing', 'Photo & Video Gear'];
+const CATS = [
+  ['戶外與運動', 64216, 90], ['樂器與音響', 52431, 43], ['腳踏車與騎行', 46774, 72],
+  ['居家收納與日用', 44397, 96], ['3C 與電腦周邊', 40249, 102], ['攝影與拍攝器材', 35807, 92],
+  ['眼鏡飾品與包袋', 34405, 68], ['服飾鞋帽', 29302, 57], ['廚房衛浴清潔', 19475, 85],
+  ['寵物用品', 15882, 40], ['集運與運費', 10872, 25], ['汽機車用品', 10261, 28],
+  ['玩具與收藏', 8403, 32], ['編織手作', 5837, 10], ['保健與個人護理', 5132, 24],
+  ['五金與工具電料', 3740, 25], ['其他', 1585, 6]
+];
+const SUM = CATS.reduce((s, c) => s + c[1], 0);
+const REST = CATS.slice(6).reduce((s, c) => s + c[1], 0);
+const YEARS = [['2017', 32909, 54], ['2018', 72572, 89], ['2019', 52523, 151], ['2020', 34787, 58], ['2021', 38670, 100],
+  ['2022', 31666, 89], ['2023', 52502, 112], ['2024', 37551, 98], ['2025', 41783, 82], ['2026', 33941, 62]];
+const BANDS = [['0–99', 250, 24101], ['100–299', 319, 64088], ['300–499', 119, 47061], ['500–999', 120, 85569], ['1K–3K', 72, 111410], ['3K+', 15, 96675]];
+// exploded parts → category (index into CATS, -1 = the other 11)
+const PARTS = [
+  { name: 'Rim', cat: 0, part: 'Rim', off: [0, 0.56, 0], a: [0.3, 0.98, 0.27], d: [1, -1] },
+  { name: 'Basket', cat: 1, part: 'Basket', off: [0, 0.36, 0], a: [0.36, 0.7, 0.25], d: [1, 0.2] },
+  { name: 'Handle', cat: 2, part: 'Handle', off: [-0.24, 0.5, 0], a: [-0.56, 1.09, 0.2], d: [-1, -1] },
+  { name: 'Seat', cat: 3, part: 'Child seat', off: [-0.28, 0.26, 0], a: [-0.405, 0.86, 0.15], d: [-1, 0.3] },
+  { name: 'Tray', cat: 4, part: 'Tray', off: [0.08, 0.12, 0], a: [0.22, 0.2, 0.2], d: [1, 0.6] },
+  { name: 'Wheels', cat: 5, part: 'Casters', off: [0, 0, 0], a: [0.315, 0.05, 0.25], d: [1, 1] },
+  { name: 'Frame', cat: -1, part: 'Frame', off: [0, 0, 0], a: [-0.405, 0.3, 0.247], d: [-1, 1] }
+];
+const FOLLOW = { Grip: 'Handle', Plate: 'Handle' };
+
+const FEST = [
+  ['6.18', '618 年中大促', '6/1–20', 2.89, 70674],
+  ['11.11', '雙 11 含預熱', '10/15–11/13', 1.78, 58694],
+  ['9.9', '99 / 918', '9/9–20', 1.75, 23071],
+  ['12.12', '雙 12', '12/10–13', 1.49, 6540],
+  ['5.20', '520', '5/18–21', 1.4, 6852]
+];
+const ERAS = [ // category, 2017–19, 2020–22, 2023–26 (% of that era's spend)
+  ['腳踏車與騎行', 0.5, 1.9, 26.5], ['居家收納與日用', 9.3, 22.1, 3.9], ['攝影與拍攝器材', 15.6, 7.7, 1.9],
+  ['眼鏡飾品與包袋', 15.7, 3.7, 3.4], ['樂器與音響', 13.0, 5.2, 15.9], ['3C 與電腦周邊', 3.9, 12.7, 12.5],
+  ['戶外與運動', 14.4, 14.9, 15.5], ['集運與運費', 5.4, 2.3, 0.3], ['編織手作', 0, 0, 3.5]
+];
+
+// category rows
+$('#catRows').innerHTML = CATS.slice(0, 6).map((c, i) => {
+  return `<li data-r><span class="n">${pad(i + 1)}</span><span class="t">${c[0]}<span class="part">${EN[i]}</span></span><span class="a">${(c[1] / SUM * 100).toFixed(1)}%</span><span class="b"><i style="--w:${(c[1] / CATS[0][1] * 100).toFixed(1)}%"></i></span></li>`;
+}).join('') + `<li data-r><span class="n">··</span><span class="t">其餘 11 類<span class="part">Everything else</span></span><span class="a">${(REST / SUM * 100).toFixed(1)}%</span><span class="b"><i style="--w:0%"></i></span></li>`;
+const yMax = Math.max(...YEARS.map(y => y[1]));
+$('#yearRows').innerHTML = YEARS.map(y =>
+  `<li data-r class="${y[1] === yMax ? 'pk' : ''}"><span class="n">'${y[0].slice(2)}</span><span class="t">${y[0]} · ${y[2]} 件</span><span class="a">${money(y[1])}</span><span class="b"><i style="--w:${(y[1] / yMax * 100).toFixed(1)}%"></i></span></li>`).join('');
+$('#festRows').innerHTML = FEST.map((f, i) =>
+  `<li data-r class="${i === 0 ? 'pk' : ''}"><span class="n">${f[0]}</span><span class="t">${f[1]}<small>${f[2]} · NT$${money(f[4])}</small></span><span class="a">${f[3].toFixed(1)}×</span><span class="b"><i style="--w:${(f[3] / 3 * 100).toFixed(1)}%"></i></span></li>`).join('') +
+  `<li data-r class="base"><span class="n">—</span><span class="t">平常日<small>NT$122 / 天</small></span><span class="a">1.0×</span><span class="b"><i style="--w:${(100 / 3).toFixed(1)}%"></i></span></li>`;
+$('#eras').innerHTML = `<span class="h" style="justify-content:flex-start">Category</span><span class="h">17—19</span><span class="h">20—22</span><span class="h">23—26</span>` +
+  ERAS.map(e => {
+    const hi = Math.max(e[1], e[2], e[3]), d = e[3] - e[1];
+    return `<span class="c">${e[0]}<em class="${d >= 0 ? 'up' : 'dn'}">${d >= 0 ? '▲' : '▼'} ${Math.abs(d).toFixed(1)}</em></span>` +
+      [e[1], e[2], e[3]].map(v => `<span class="${v === hi ? 'hi' : ''}">${v.toFixed(1)}<i style="--h:${v}"></i></span>`).join('');
+  }).join('');
+const bMax = Math.max(...BANDS.map(b => b[1])), aMax = Math.max(...BANDS.map(b => b[2]));
+$('#hist').innerHTML = BANDS.map(b =>
+  `<div class="c${b[2] === aMax ? ' hot' : ''}"><div class="up"><b>${b[1]}</b><i style="--h:${(b[1] / bMax * 82).toFixed(1)}%"></i></div><span class="lab">${b[0]}</span>` +
+  `<div class="dn"><i style="--h:${(b[2] / aMax * 78).toFixed(1)}%"></i><b>${(b[2] / 1000).toFixed(1)}K</b></div></div>`).join('');
+
+// grain
+(() => {
+  const c = document.createElement('canvas'); c.width = c.height = 180;
+  const g = c.getContext('2d'), d = g.createImageData(180, 180);
+  for (let i = 0; i < d.data.length; i += 4) { const v = Math.random() * 255; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 255; }
+  g.putImageData(d, 0, 0);
+  $('#grain').style.backgroundImage = `url(${c.toDataURL()})`;
+})();
+
+// ---------- smooth scroll ----------
+gsap.registerPlugin(ScrollTrigger);
+let lenis = null;
+if (!reduce && window.Lenis) {
+  lenis = new Lenis({ duration: 1.25, easing: t => Math.min(1, 1.001 - Math.pow(2, -10 * t)), smoothWheel: true });
+  lenis.on('scroll', ScrollTrigger.update);
+  gsap.ticker.add(t => lenis.raf(t * 1000));
+  gsap.ticker.lagSmoothing(0);
+}
+
+// ---------- three ----------
+const canvas = $('#gl');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+renderer.setClearColor(0x000000, 0);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x09090A, 4.5, 9);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const camera = new THREE.PerspectiveCamera(26, 1, 0.1, 50);
+const key = new THREE.DirectionalLight(0xfff4e8, 2.1);
+key.position.set(2.2, 4.2, 2.6); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0004; key.shadow.normalBias = 0.01;
+Object.assign(key.shadow.camera, { left: -1.4, right: 1.4, top: 1.4, bottom: -1.4, near: 0.5, far: 10 });
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x4F7CFF, 2.4); rim.position.set(-3, 1.8, -2.4); scene.add(rim);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x0b0c14, 0.35));
+
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(14, 14), new THREE.ShadowMaterial({ opacity: 0.5 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+const polar = new THREE.PolarGridHelper(1.35, 16, 5, 96, 0x4F7CFF, 0x2a2d3a);
+polar.material.transparent = true; polar.material.opacity = 0.28; polar.position.y = 0.001; scene.add(polar);
+
+const U = { uContour: { value: 0 }, uBlue: { value: new THREE.Color(0x4F7CFF) }, uTime: { value: 0 } };
+function plaster(hex, metal = 0.9, rough = 0.42, env = 1.25) {
+  const m = new THREE.MeshStandardMaterial({ color: hex, roughness: rough, metalness: metal, envMapIntensity: env });
+  m.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, U);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;\nuniform float uContour;\nuniform vec3 uBlue;')
+      .replace('#include <dithering_fragment>', `#include <dithering_fragment>
+        float band = fract(vWP.y * 9.7);
+        float cut = mix(1.02, 0.46, uContour);
+        if (uContour > 0.001 && band > cut) discard;
+        float edge = smoothstep(cut - 0.07, cut, band) * uContour;
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, uBlue * 1.6, edge);`);
+  };
+  return m;
+}
+const MATS = { base: plaster(0x4A4E55), grip: plaster(0x16171A, 0, 0.72, 0.6), wheel: plaster(0x232529, 0.25, 0.6, 0.8), q: plaster(0x3D6BFF, 0.3, 0.1, 1.3) };
+const lineMat = new THREE.LineBasicMaterial({ color: 0x4F7CFF, transparent: true, opacity: 0, depthWrite: false });
+
+const rig = new THREE.Group(); scene.add(rig);
+const inner = new THREE.Group(); inner.position.x = 0.07; rig.add(inner);
+const parts = {};
+
+// ---------- question mark glow: breathing emissive, soft halo, and a ray burst as it lifts off ----------
+function spriteTex(draw, n = 512) {
+  const c = document.createElement('canvas'); c.width = c.height = n;
+  draw(c.getContext('2d'), n); const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; return tx;
+}
+const haloTex = spriteTex((g, n) => {
+  const gr = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
+  gr.addColorStop(0, 'rgba(230,238,255,1)'); gr.addColorStop(0.18, 'rgba(120,160,255,0.55)'); gr.addColorStop(0.5, 'rgba(79,124,255,0.12)'); gr.addColorStop(1, 'rgba(79,124,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, n, n);
+});
+const rayTex = spriteTex((g, n) => {
+  g.translate(n / 2, n / 2); g.globalCompositeOperation = 'lighter';
+  const N = 28;
+  for (let i = 0; i < N; i++) {
+    const a = i / N * Math.PI * 2 + (i % 3) * 0.05, len = n * (0.28 + ((i * 7919) % 13) / 13 * 0.22), w = 0.012 + ((i * 104729) % 7) / 7 * 0.03;
+    const gr = g.createLinearGradient(0, 0, Math.cos(a) * len, Math.sin(a) * len);
+    gr.addColorStop(0, 'rgba(235,242,255,0.95)'); gr.addColorStop(0.35, 'rgba(140,175,255,0.45)'); gr.addColorStop(1, 'rgba(79,124,255,0)');
+    g.fillStyle = gr; g.beginPath(); g.moveTo(0, 0);
+    g.arc(0, 0, len, a - w, a + w); g.closePath(); g.fill();
+  }
+});
+const GLOW = { halo: null, rays: null, rays2: null, light: null, c: new THREE.Vector3() };
+function setupGlow(o) {
+  o.geometry.computeBoundingBox(); o.geometry.boundingBox.getCenter(GLOW.c);
+  const mk = (tex, sc) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false, opacity: 0 })); sp.position.copy(GLOW.c); sp.scale.setScalar(sc); sp.renderOrder = 5; o.add(sp); return sp; };
+  GLOW.halo = mk(haloTex, 1.4); GLOW.rays = mk(rayTex, 1); GLOW.rays2 = mk(rayTex, 1);
+  GLOW.light = new THREE.PointLight(0xBFD2FF, 0, 3.5, 2); GLOW.light.position.copy(GLOW.c); o.add(GLOW.light);
+  MATS.q.emissive = new THREE.Color(0x3D6BFF);
+}
+const EM_A = new THREE.Color(0x3D6BFF), EM_B = new THREE.Color(0xDCE6FF);
+
+const loader = new GLTFLoader();
+function loadCart(onLoad, onProgress, onError) {
+  const get = u => fetch(u).then(r => { if (!r.ok) throw new Error(r.status); return r; });
+  let binary = false;
+  get('cart_wire.glb').then(r => { binary = true; return r; }, () => get('cart_wire.glb.txt')).then(r => {
+    const total = +r.headers.get('content-length') || 0, reader = r.body.getReader(), chunks = []; let got = 0;
+    const pump = () => reader.read().then(({ done, value }) => {
+      if (done) return binary ? new Blob(chunks).arrayBuffer() : new Blob(chunks).text();
+      chunks.push(value); got += value.length; if (total) onProgress({ loaded: got, total });
+      return pump();
+    });
+    return pump();
+  }).then(b64 => {
+    if (binary) return loader.parse(b64, '', onLoad, onError);
+    const bin = atob(b64.replace(/\s+/g, '')), buf = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    loader.parse(buf.buffer, '', onLoad, onError);
+  }).catch(onError);
+}
+loadCart(gltf => {
+  gltf.scene.traverse(o => {
+    if (!o.isMesh) return;
+    o.material = o.name === 'Grip' ? MATS.grip : o.name === 'Wheels' ? MATS.wheel : o.name === 'Question' ? MATS.q : MATS.base;
+    o.castShadow = true; o.receiveShadow = true;
+    o.add(new THREE.LineSegments(new THREE.EdgesGeometry(o.geometry, 4), lineMat));
+    parts[o.name] = { o, base: o.position.clone() };
+  });
+  inner.add(gltf.scene);
+  if (parts.Question) setupGlow(parts.Question.o);
+  $('#loading').classList.add('done');
+  intro();
+}, e => { if (e.total) $('#loading').textContent = `Loading model ${pad(Math.round(e.loaded / e.total * 100), 3)}%`; },
+() => { $('#loading').textContent = 'Model failed to load'; });
+
+// ---------- scroll state ----------
+const S = { spin: reduce ? 0 : 1, q: 1, x: 0.5, y: 0, ry: -0.62, rx: 0, ex: 0, wire: 0, contour: 0, dim: 1, tags: 0, grid: 1, lift: 0, sc: 1, blur: reduce ? 0 : 1 };
+const K = [
+  { x: 0.5, ry: -0.62, rx: 0, ex: 0, wire: 0, contour: 0, dim: 0, tags: 0, grid: 1 },
+  { spin: 0, x: 0.55, ry: -0.42, rx: 0.1, ex: 0, wire: 0, contour: 0, dim: 0, tags: 0, grid: 0.7 },
+  { x: 0.72, ry: -0.78, rx: 0.1, ex: 1, wire: 0, contour: 0, dim: 0, tags: 1, grid: 0.4, sc: 0.8 },
+  { sc: 1, x: 0.52, ry: 0.55, rx: 0.06, ex: 0.12, wire: 1, contour: 0, dim: 0, tags: 0, grid: 1 },
+  { x: 0.5, ry: -0.3, rx: 0.02, ex: 0, wire: 0, contour: 1, dim: 0, tags: 0, grid: 0.5 },
+  { x: 0.55, ry: -2.35, rx: 0.08, ex: 0.05, wire: 0, contour: 0, dim: 0, tags: 0, grid: 0.8 },
+  { x: 0.5, ry: -0.95, rx: 0.05, ex: 0, wire: 0, contour: 0, dim: 0, tags: 0, grid: 1 },
+  { x: 0.55, ry: 0.45, rx: 0.08, ex: 0.4, wire: 0, contour: 0, dim: 0, tags: 0, grid: 0.6 },
+  { spin: 1, x: 0.5, ry: -0.62, rx: 0, ex: 0, wire: 0, contour: 0, dim: 0, tags: 0, grid: 1 }
+];
+const chapters = $$('.ch');
+let tl = null;
+function buildTimeline() {
+  if (tl) { tl.scrollTrigger && tl.scrollTrigger.kill(); tl.kill(); }
+  const max = document.documentElement.scrollHeight - innerHeight;
+  tl = gsap.timeline({ scrollTrigger: { trigger: '#main', start: 'top top', end: 'bottom bottom', scrub: reduce ? true : 1.1 } });
+  chapters.forEach((c, i) => {
+    if (i === 0) return;
+    const top = c.offsetTop;
+    const a = Math.max(0, (top - innerHeight * 1.0) / max), b = Math.min(1, (top - innerHeight * 0.15) / max);
+    tl.to(S, { ...K[i], duration: Math.max(0.001, b - a), ease: 'power2.inOut' }, a);
+  });
+  tl.set({}, {}, 1);
+  // the question mark lifts off and leaves through the top as soon as the reader starts scrolling
+  if (qTween) { qTween.scrollTrigger && qTween.scrollTrigger.kill(); qTween.kill(); }
+  qTween = gsap.fromTo(S, { q: 1 }, { q: 0, ease: 'power2.in', immediateRender: false, scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom 55%', scrub: true } });
+}
+let qTween = null;
+
+// chapter tracking + reveals
+let snapTheme = false, curCh = 0;
+const rail = $('#rail');
+rail.innerHTML = chapters.map((c, i) => `<span><b>${pad(i)} ${c.dataset.name}</b></span>`).join('');
+const ticks = [...rail.children];
+chapters.forEach((c, i) => ScrollTrigger.create({
+  trigger: c, start: 'top 55%', end: 'bottom 55%',
+  onToggle: self => {
+    if (!self.isActive) return;
+    const html = document.documentElement, want = c.dataset.theme === 'light';
+    // hero ↔ overview: the flip lands on the frame the light burst peaks, so no crossfade
+    if (Math.max(i, curCh) <= 1 && html.classList.contains('light') !== want) {
+      snapTheme = true; html.classList.add('snap');
+      requestAnimationFrame(() => requestAnimationFrame(() => html.classList.remove('snap')));
+    }
+    curCh = i; html.classList.toggle('light', want); ticks.forEach((t, k) => t.classList.toggle('on', k === i)); $('#hud-ch').textContent = `${pad(i)} / ${pad(chapters.length - 1)}`; $('#hud-name').textContent = `${pad(i)} · ${c.dataset.name}`; }
+}));
+ticks[0].classList.add('on');
+
+if (!reduce) {
+  const revealables = $$('[data-r]').filter(el => el.getBoundingClientRect().top > innerHeight * 0.95);
+  gsap.set(revealables, { opacity: 0, y: 28 });
+  ScrollTrigger.batch(revealables, {
+    start: 'top 88%', once: true,
+    onEnter: els => gsap.to(els, { opacity: 1, y: 0, duration: 0.9, ease: 'expo.out', stagger: 0.07, overwrite: true })
+  });
+  $$('.rows .b i').forEach(el => { gsap.set(el, { scaleX: 0 }); ScrollTrigger.create({ trigger: el, start: 'top 90%', once: true, onEnter: () => gsap.to(el, { scaleX: 1, duration: 1.1, ease: 'expo.out', delay: 0.15 }) }); });
+  $$('#hist i').forEach((el, i) => { gsap.set(el, { scaleY: 0 }); ScrollTrigger.create({ trigger: '#hist', start: 'top 85%', once: true, onEnter: () => gsap.to(el, { scaleY: 1, duration: 1.1, ease: 'expo.out', delay: 0.1 + (i >> 1) * 0.07 + (i & 1) * 0.25 }) }); });
+  $$('[data-count]').forEach(el => {
+    const to = +el.dataset.count, o = { v: 0 }; el.textContent = '0';
+    ScrollTrigger.create({ trigger: el, start: 'top 88%', once: true, onEnter: () => gsap.to(o, { v: to, duration: 1.6, ease: 'expo.out', onUpdate: () => { el.textContent = money(Math.round(o.v)); } }) });
+  });
+}
+
+// tags for exploded view
+const tagsEl = $('#tags'), leaders = $('#leaders');
+PARTS.forEach(p => {
+  const d = document.createElement('div');
+  d.className = 'ptag' + (p.d[0] < 0 ? ' l' : '');
+  const amt = p.cat < 0 ? REST : CATS[p.cat][1];
+  d.innerHTML = `<span>${p.cat < 0 ? 'Everything else' : EN[p.cat]}</span><b>${p.cat < 0 ? '其餘 11 類' : CATS[p.cat][0]}</b><em>NT$ ${money(amt)} · ${(amt / SUM * 100).toFixed(1)}%</em>`;
+  tagsEl.appendChild(d); p.tag = d;
+  p.path = document.createElementNS('http://www.w3.org/2000/svg', 'polyline'); leaders.appendChild(p.path);
+  p.dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle'); p.dot.setAttribute('r', '2.5'); p.dot.setAttribute('fill', '#4F7CFF'); leaders.appendChild(p.dot);
+});
+
+// ---------- intro ----------
+function intro() {
+  if (reduce) { S.blur = 0; return; }
+  gsap.fromTo(S, { blur: 1 }, { blur: 0, duration: 1.8, ease: 'expo.out', delay: 0.1 });
+  gsap.fromTo(S, { lift: 0.12 }, { lift: 0, duration: 1.8, ease: 'expo.out' });
+  gsap.from('.hero [data-r]', { opacity: 0, y: 30, duration: 1.1, ease: 'expo.out', stagger: 0.09, delay: 0.25 });
+}
+
+// ---------- layout ----------
+let W = 1, H = 1, narrow = false;
+function resize() {
+  W = innerWidth; H = innerHeight; narrow = W < 760;
+  renderer.setSize(W, H, false);
+  camera.aspect = W / H;
+  camera.fov = narrow ? 34 : 26;
+  camera.updateProjectionMatrix();
+  $('#overlay').setAttribute('viewBox', `0 0 ${W} ${H}`);
+  buildTimeline(); ScrollTrigger.refresh();
+}
+addEventListener('resize', () => { clearTimeout(resize.t); resize.t = setTimeout(resize, 120); });
+
+// ---------- pointer ----------
+const ptr = { x: 0, y: 0, tx: 0, ty: 0 };
+addEventListener('pointermove', e => { ptr.tx = e.clientX / W * 2 - 1; ptr.ty = e.clientY / H * 2 - 1; });
+
+// ---------- render ----------
+const v = new THREE.Vector3(), v2 = new THREE.Vector3();
+const FOG_D = new THREE.Color(0x09090A), FOG_L = new THREE.Color(0xECEAE5); let L = 0;
+const groundBox = new THREE.Box3();
+const LINE_D = new THREE.Color(0x4F7CFF), LINE_L = new THREE.Color(0x9DB6FF);
+const toScreen = (p, out) => { out.copy(p).project(camera); return [(out.x + 1) / 2 * W, (1 - out.y) / 2 * H]; };
+function frame(time) {
+  const t = time;
+  ptr.x += (ptr.tx - ptr.x) * 0.06; ptr.y += (ptr.ty - ptr.y) * 0.06;
+  const k = narrow ? 0 : 1;
+  const idle = reduce ? 0 : Math.sin(t * 0.6) * 0.012;
+  rig.position.x = S.x * k + (narrow && S.x > 1 ? S.x : 0);
+  // keep the casters on the floor: lift for tilt, and lift the whole cart while the wheels drop away in the exploded view
+  rig.position.y = 0;
+  rig.scale.setScalar(S.sc * (narrow ? 1 : 0.8));
+  const sa = ((t * 0.28 + Math.PI) % (Math.PI * 2)) - Math.PI; // idle spin, wrapped so it unwinds the short way
+  rig.rotation.y = S.ry + sa * S.spin + ptr.x * (reduce ? 0 : 0.1);
+  rig.rotation.x = S.rx + ptr.y * (reduce ? 0 : 0.03);
+  if (parts.Wheels) { // casters rest exactly on the floor whatever the tilt or scale
+    rig.updateMatrixWorld(true);
+    rig.position.y = S.lift - groundBox.setFromObject(parts.Wheels.o).min.y + 0.001;
+  } else rig.position.y = S.lift;
+  polar.position.x = rig.position.x;
+
+  const e = S.ex < 0.5 ? 4 * S.ex ** 3 : 1 - Math.pow(-2 * S.ex + 2, 3) / 2;
+  for (const n in parts) {
+    if (n === 'Question') continue;
+    const P = PARTS.find(p => p.name === (FOLLOW[n] || n));
+    const off = P ? P.off : [0, 0, 0], q = parts[n];
+    q.o.position.set(q.base.x + off[0] * e, q.base.y + off[1] * e, q.base.z + off[2] * e);
+  }
+  const Q = parts.Question;
+  if (Q) {
+    const up = 1 - S.q;
+    // stays visible (hiding it would drop the point light and force a shader recompile); it is far above frame once gone
+    Q.o.position.set(Q.base.x, Q.base.y + up * up * 1.15 + (reduce ? 0 : Math.sin(t * 1.3) * 0.015), Q.base.z);
+    Q.o.rotation.y = up * 1.4;
+    if (up >= 0.985) Q.o.position.y += 40; // parked far out of frame once it has burst
+    if (GLOW.halo) {
+      const breath = reduce ? 0.5 : 0.5 + 0.5 * Math.sin(t * 1.55);            // ~4 s breathing cycle
+      const e = Math.min(1, up / 0.9) ** 1.3;                                 // brightens as it rises
+      const out = up < 0.985 ? 1 : 0;                                         // gone on the same frame the page turns white            // fades while leaving the frame
+      MATS.q.emissiveIntensity = (0.25 + breath * 0.35 + e * 4.5) * out;
+      MATS.q.emissive.copy(EM_A).lerp(EM_B, e * 0.8);
+      GLOW.halo.material.opacity = Math.min(1, 0.35 + breath * 0.3 + e * 0.5) * out;
+      GLOW.halo.scale.setScalar(1.2 + breath * 0.15 + e * 2.6);
+      GLOW.rays.material.opacity = e * 0.95 * out;
+      GLOW.rays.scale.setScalar(0.8 + e * 6);
+      GLOW.rays.material.rotation = t * 0.12;
+      GLOW.rays2.material.opacity = e * 0.55 * out;
+      GLOW.rays2.scale.setScalar(0.6 + e * 4.2);
+      GLOW.rays2.material.rotation = -t * 0.2 + 0.3;
+      GLOW.light.intensity = (0.3 + breath * 0.3 + e * 7) * out;
+      rig.updateMatrixWorld(true);
+      const [fx, fy] = toScreen(Q.o.localToWorld(v.copy(GLOW.c)), v2);
+      const fl = $('#flare');
+      fl.style.opacity = Math.min(1, e * 1.05 * out).toFixed(3);
+      if (Number.isFinite(fx + fy)) fl.style.transform = `translate(${fx.toFixed(1)}px, ${fy.toFixed(1)}px) scale(${(0.3 + e * 1.1).toFixed(3)})`;
+    }
+  }
+  const lt = document.documentElement.classList.contains('light') ? 1 : 0;
+  if (snapTheme) { L = lt; snapTheme = false; }
+  L += (lt - L) * 0.07; scene.fog.color.copy(FOG_D).lerp(FOG_L, L);
+  polar.material.opacity = (0.28 - L * 0.1) * S.grid;
+  // on light chapters the cart turns into pale blue line work so it never fights the copy
+  const w = Math.max(S.wire, L);
+  lineMat.color.copy(LINE_D).lerp(LINE_L, L);
+  lineMat.opacity = w * (0.7 - L * 0.15);
+  floor.material.opacity = 0.5 * (1 - L);
+  const op = 1 - w * 0.97;
+  for (const m of Object.values(MATS)) { const tr = op < 0.999; if (m.transparent !== tr) { m.transparent = tr; m.needsUpdate = true; } m.opacity = op; m.depthWrite = op > 0.5; }
+  U.uContour.value = S.contour;
+  canvas.style.filter = S.blur > 0.01 ? `blur(${(S.blur * 22).toFixed(1)}px)` : '';
+
+  const dist = narrow ? 5.2 : 4.5;
+  camera.position.set(-0.12 * k + ptr.x * 0.08, 0.98 - ptr.y * 0.05, dist);
+  camera.lookAt(-0.12 * k, 0.52 - k * 0.05, 0);
+  renderer.render(scene, camera);
+
+  // dimension line (hero)
+  const dg = $('#dimline');
+  dg.setAttribute('opacity', (S.dim * (1 - S.blur)).toFixed(3));
+  if (S.dim > 0.01) {
+    rig.updateMatrixWorld(true);
+    const a = toScreen(inner.localToWorld(v.set(-0.58, 1.25, 0)), v2), b = toScreen(inner.localToWorld(v.set(0.44, 1.25, 0)), v2.clone());
+    const y = Math.min(a[1], b[1]) - 10, x1 = Math.min(a[0], b[0]), x2 = Math.max(a[0], b[0]);
+    if (!Number.isFinite(x1 + x2 + y)) return;
+    $('#dl').setAttribute('x1', x1); $('#dl').setAttribute('x2', x2); $('#dl').setAttribute('y1', y); $('#dl').setAttribute('y2', y);
+    $('#dl1').setAttribute('x1', x1); $('#dl1').setAttribute('x2', x1); $('#dl1').setAttribute('y1', y - 5); $('#dl1').setAttribute('y2', y + 5);
+    $('#dl2').setAttribute('x1', x2); $('#dl2').setAttribute('x2', x2); $('#dl2').setAttribute('y1', y - 5); $('#dl2').setAttribute('y2', y + 5);
+    $('#dt').setAttribute('x', (x1 + x2) / 2); $('#dt').setAttribute('y', y - 10);
+  }
+
+  // exploded tags
+  const tagOp = narrow ? 0 : Math.max(0, (S.tags - 0.55) / 0.45);
+  leaders.setAttribute('opacity', tagOp.toFixed(3));
+  rail.style.opacity = (1 - tagOp).toFixed(3);
+  PARTS.forEach((p, i) => {
+    p.tag.style.opacity = tagOp;
+    if (tagOp <= 0) return;
+    const q = parts[p.name]; if (!q) return;
+    rig.updateMatrixWorld(true);
+    const [sx, sy] = toScreen(q.o.parent.localToWorld(v.set(p.a[0], p.a[1], p.a[2]).add(q.o.position).sub(q.base)), v2);
+    const ex = sx + p.d[0] * 70, ey = sy + p.d[1] * 34, fx = ex + p.d[0] * 26;
+    p.path.setAttribute('points', `${sx},${sy} ${ex},${ey} ${fx},${ey}`);
+    p.dot.setAttribute('cx', sx); p.dot.setAttribute('cy', sy);
+    p.tag.style.left = p.d[0] > 0 ? `${fx + 8}px` : '';
+    p.tag.style.right = p.d[0] < 0 ? `${W - fx + 8}px` : '';
+    p.tag.style.top = `${ey}px`;
+  });
+
+  // HUD readouts
+  const deg = ((rig.rotation.y * 180 / Math.PI) % 360);
+  $('#hud-xyz').textContent = `ROT ${deg < 0 ? '−' : '+'}${pad(Math.abs(deg).toFixed(1), 5)}° · EXP ${S.ex.toFixed(2)} · WIRE ${S.wire.toFixed(2)} · CUT ${S.contour.toFixed(2)}`;
+  const max = document.documentElement.scrollHeight - innerHeight;
+  $('#hud-pct').textContent = `SCROLL ${pad(Math.round(scrollY / Math.max(1, max) * 100), 3)}%`;
+}
+gsap.ticker.add(frame);
+
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => resize());
+resize();
+</script>

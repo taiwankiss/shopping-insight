@@ -1,0 +1,8 @@
+# earlier drafts and local-only files
+plaster.html
+metal.bak.html
+cart.glb
+cart.glb.txt
+blender/cart.py
+.DS_Store
+blender/preview.png
