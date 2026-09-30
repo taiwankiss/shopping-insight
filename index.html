@@ -415,6 +415,7 @@
 <script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
@@ -576,9 +577,10 @@ const rayTex = spriteTex((g, n) => {
     g.arc(0, 0, len, a - w, a + w); g.closePath(); g.fill();
   }
 });
-const GLOW = { halo: null, rays: null, rays2: null, light: null, c: new THREE.Vector3() };
+const GLOW = { halo: null, rays: null, rays2: null, light: null, c: new THREE.Vector3(), k: 1 };
 function setupGlow(o) {
   o.geometry.computeBoundingBox(); o.geometry.boundingBox.getCenter(GLOW.c);
+  GLOW.k = 1 / o.scale.x;
   const mk = (tex, sc) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false, opacity: 0 })); sp.position.copy(GLOW.c); sp.scale.setScalar(sc); sp.renderOrder = 5; o.add(sp); return sp; };
   GLOW.halo = mk(haloTex, 1.4); GLOW.rays = mk(rayTex, 1); GLOW.rays2 = mk(rayTex, 1);
   GLOW.light = new THREE.PointLight(0xBFD2FF, 0, 3.5, 2); GLOW.light.position.copy(GLOW.c); o.add(GLOW.light);
@@ -586,7 +588,7 @@ function setupGlow(o) {
 }
 const EM_A = new THREE.Color(0x3D6BFF), EM_B = new THREE.Color(0xDCE6FF);
 
-const loader = new GLTFLoader();
+const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder); // model is meshopt-compressed and quantized
 function loadCart(onLoad, onProgress, onError) {
   const get = u => fetch(u).then(r => { if (!r.ok) throw new Error(r.status); return r; });
   let binary = false;
@@ -768,12 +770,12 @@ function frame(time) {
       MATS.q.emissiveIntensity = (0.25 + breath * 0.35 + e * 4.5) * out;
       MATS.q.emissive.copy(EM_A).lerp(EM_B, e * 0.8);
       GLOW.halo.material.opacity = Math.min(1, 0.35 + breath * 0.3 + e * 0.5) * out;
-      GLOW.halo.scale.setScalar(1.2 + breath * 0.15 + e * 2.6);
+      GLOW.halo.scale.setScalar((1.2 + breath * 0.15 + e * 2.6) * GLOW.k);
       GLOW.rays.material.opacity = e * 0.95 * out;
-      GLOW.rays.scale.setScalar(0.8 + e * 6);
+      GLOW.rays.scale.setScalar((0.8 + e * 6) * GLOW.k);
       GLOW.rays.material.rotation = t * 0.12;
       GLOW.rays2.material.opacity = e * 0.55 * out;
-      GLOW.rays2.scale.setScalar(0.6 + e * 4.2);
+      GLOW.rays2.scale.setScalar((0.6 + e * 4.2) * GLOW.k);
       GLOW.rays2.material.rotation = -t * 0.2 + 0.3;
       GLOW.light.intensity = (0.3 + breath * 0.3 + e * 7) * out;
       rig.updateMatrixWorld(true);
